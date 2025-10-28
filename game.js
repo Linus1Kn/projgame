@@ -43,6 +43,11 @@ const imgSources = [
 	},
 
 	{
+		name: "charger_idle1",
+		src: "./sprites/enemies/charger/charger_idle1.png",
+	},
+
+	{
 		name: "smoke_particle1",
 		src: "./sprites/generic/smoke_particle1.png",
 	},
@@ -76,7 +81,27 @@ const imgSources = [
 		name: "shotgun",
 		src: "./sprites/weapons/shotgun.png",
 	},
+	{
+		name: "tommy",
+		src: "./sprites/weapons/tommy.png",
+	},
+	{
+		name: "star",
+		src: "./sprites/weapons/star.png",
+	},
+	{
+		name: "star_empty",
+		src: "./sprites/weapons/star_empty.png",
+	},
 
+	{
+		name: "chest",
+		src: "./sprites/chests/chest.png",
+	},
+	{
+		name: "chest_open",
+		src: "./sprites/chests/chest_open.png",
+	},
 	{
 		name: "coin",
 		src: "./sprites/pickups/coin.png",
@@ -84,6 +109,30 @@ const imgSources = [
 	{
 		name: "heart",
 		src: "./sprites/pickups/heart.png",
+	},
+	{
+		name: "orb",
+		src: "./sprites/pickups/orb.png",
+	},
+	{
+		name: "pw_bullet",
+		src: "./sprites/pickups/pw_bullet.png",
+	},
+	{
+		name: "pw_lower_cooldown",
+		src: "./sprites/pickups/pw_lower_cooldown.png",
+	},
+	{
+		name: "pw_higher_cooldown",
+		src: "./sprites/pickups/pw_higher_cooldown.png",
+	},
+	{
+		name: "pw_lower_spread",
+		src: "./sprites/pickups/pw_lower_spread.png",
+	},
+	{
+		name: "pw_higher_spread",
+		src: "./sprites/pickups/pw_higher_spread.png",
 	},
 ]
 const sprites = {}
@@ -95,15 +144,44 @@ imgSources.forEach(function (item) {
 
 //Audio
 let sounds = {
-	flap: new Audio('./audio/flap.mp3'),
+	damage: new Audio('./audio/damage.wav'),
+	hit: new Audio('./audio/hit.wav'),
+	shoot: new Audio('./audio/shoot.wav'),
+	coin: new Audio('./audio/coin.wav'),
+	powerup: new Audio('./audio/powerup.wav'),
+	music: new Audio('./audio/nokia_blue_ice.wav'),
+	death: new Audio('./audio/death.wav'),
 }
 function playSnd(name) {
 	const snd = sounds[name]
-	snd.pause();
 	snd.currentTime = 0;
 	snd.play();
 }
 
+const music = sounds["music"]
+music.loop = true
+music.playbackRate = 1
+music.preservesPitch = false
+
+async function tryPlayAudio() {
+  try {
+    await music.play();
+    console.log('Audio is playing!');
+  } catch (err) {
+    console.warn('Autoplay prevented, waiting for user interaction...');
+    // Retry after user interacts
+    document.addEventListener('click', retryOnUserAction, { once: true });
+  }
+}
+
+function retryOnUserAction() {
+  music.play().then(() => {
+    console.log('Audio started after user interaction');
+  }).catch(err => {
+    console.error('Still failed to play:', err);
+  });
+}
+tryPlayAudio()
 
 //FUNCTIONS
 
@@ -118,7 +196,7 @@ function lerp(a, b, t) {
 }
 
 let vec = {}
-vec.magnitude = function (vec) {
+vec.magnitudeSquared = function (vec) {
 	return (Math.abs(vec.x) + Math.abs(vec.y)) / 2
 }
 vec.normalize = function (vec) {
@@ -314,6 +392,11 @@ function killEntity(entity){
 
 function damageEntity(entity, damage){
 	entity.health -= damage
+	if (entity == plr){
+		playSnd("damage")
+	}else{
+		playSnd("hit")
+	}
 	if (entity.onDamage){entity.onDamage(damage)}
 	if (entity.health <= 0){
 		killEntity(entity)
@@ -338,6 +421,16 @@ function spawnCoins(pos, amount){
 		entities.push(new Coin(pos))
 	}
 }
+
+function displayString(str, pos, elapsed, color, rightAlign) {
+	const letterSize = 20
+		ctx.font = "normal 32px Tiny5"
+		ctx.fillStyle = color || "rgb(75, 75, 75)"
+		for (let i = 0; i < str.length; i++) {
+			const letter = str[i]
+			ctx.fillText(letter, pos.x + ((rightAlign && (i+1)) || (i - str.length/2)) * letterSize + (letterSize/2), pos.y + (elapsed && Math.sin(elapsed * 0.005 + i) * 5) || 0);
+		}
+	}
 
 class BaseParticle {
 	constructor(pos, vel, velDamp, grav, lifetime, normal) {
@@ -418,8 +511,24 @@ class SmokeParticle extends BaseParticle {
 	}
 }
 
-class WeaponPistol {
+class BaseWeapon {
 	constructor() {
+		this.name = "Default"
+		this.damage = 5
+		this.cooldown = 10
+		this.spread = 0
+		this.amount = 1
+		this.projectile = PlayerProjectile
+		this.sprite = sprites.pistol
+		this.screenshake = 1
+
+		this.powerups = 0
+	}
+}
+
+class WeaponPistol extends BaseWeapon {
+	constructor() {
+		super()
 		this.name = "Pistol"
 		this.damage = 5
 		this.cooldown = 10
@@ -431,10 +540,25 @@ class WeaponPistol {
 	}
 }
 
-class WeaponRifle {
+class WeaponTommy extends BaseWeapon {
 	constructor() {
+		super()
+		this.name = "Tommy"
+		this.damage = 2
+		this.cooldown = 4
+		this.spread = 10
+		this.amount = 1
+		this.projectile = PlayerProjectile
+		this.sprite = sprites.tommy
+		this.screenshake = 1
+	}
+}
+
+class WeaponRifle extends BaseWeapon {
+	constructor() {
+		super()
 		this.name = "Rifle"
-		this.damage = 30
+		this.damage = 25
 		this.cooldown = 30
 		this.spread = 0
 		this.amount = 1
@@ -444,10 +568,11 @@ class WeaponRifle {
 	}
 }
 
-class WeaponShawty {
+class WeaponShotgun extends BaseWeapon{
 	constructor() {
-		this.name = "Shawty"
-		this.damage = 3
+		super()
+		this.name = "Shotty"
+		this.damage = 4
 		this.cooldown = 20
 		this.spread = 30
 		this.amount = 5
@@ -455,6 +580,11 @@ class WeaponShawty {
 		this.sprite = sprites.shotgun
 		this.screenshake = 3
 	}
+}
+
+function getRandomWeapon(){
+	const list = [WeaponPistol, WeaponShotgun, WeaponRifle, WeaponTommy]
+	return new list[getRandomInt(0, list.length-1)]
 }
 
 class BaseEntity {
@@ -484,6 +614,236 @@ class BaseEntity {
 		renderSprite(this.sprite, framePos, 0, this.size, (deg.rotate(this.rot, 90) > 180))
 	}
 }
+
+class Chest extends BaseEntity {
+	constructor(pos, rot, vel, velDamp, size) {
+		super(pos, rot, vel, velDamp, size);
+
+		this.sprite = sprites.chest
+		this.opened = false
+		this.ignoreCollisions = true
+
+		this.lifetime = 100
+		this.cost = 10
+	}
+	onHit(entity) {
+		if (entity == plr && plr.inputs.space){
+			if (plr.coins < this.cost){return}
+			plr.coins = plr.coins - this.cost
+			this.opened = true
+			this.sprite = sprites.chest_open
+			emitParticles(SmokeParticle, this.pos, this.size/2, 3, null)
+			
+			if (Math.random() > 0.7){
+				entities.push(new ItemWeapon(getRandomWeapon(), vec.add(this.pos, vec.new(0, -64)), vec.new(0, -15, 0)))
+			}else if (Math.random() > 0.7){
+				entities.push(new ItemHeal(vec.add(this.pos, vec.new(0, -64)), vec.new(0, -15, 0)))
+			}else{
+				entities.push(new ItemPowerup(vec.add(this.pos, vec.new(0, -64)), vec.new(0, -15, 0)))
+			}
+			//plr.inv.push(getRandomWeapon())
+		}
+	}
+	render(dt, elapsed, tickDelta, t){
+		let framePos = vec.add(vec.lerp(this._pos, this.pos, tickDelta), camera.framePos)
+		let frameRot = 0
+
+		renderSprite(this.sprite, framePos, 0, this.size, (deg.rotate(this.rot, 90) > 180))
+		if (this.opened == false){displayString("cost: "+this.cost, vec.add(framePos, vec.new(this.size/2, 0)), elapsed)}
+	}
+	tick(t) {
+		
+		if (this.opened){
+			this.lifetime = this.lifetime - 1
+			if (this.lifetime <= 0){killEntity(this)}
+			return
+		}
+		
+		for (let j in this.overlapping) {
+			let entity = this.overlapping[j]
+			this.onHit(entity)
+		}
+
+	}
+}
+
+class BaseItem extends BaseEntity {
+	constructor(pos, vel, size) {
+		super(pos, 0, vel, undefined, size);
+
+		this.ignoreCollisions = true
+		this.sprite = sprites.heart
+
+		this.lifetime = 1200
+	}
+	onPickup(entity) {
+		emitParticles(SmokeParticle, this.pos, this.size/2, 3, null)
+		//plr.inv.push(getRandomWeapon())
+		killEntity(this)
+	}
+	tick(t) {
+		for (let j in this.overlapping) {
+			let entity = this.overlapping[j]
+			
+			if (entity == plr && plr.inputs.space){
+				this.onPickup(entity)
+				return
+			}
+		}
+
+		this.lifetime = this.lifetime - 1
+		if (this.lifetime <= 0){killEntity(this)}
+	}
+}
+
+class ItemWeapon extends BaseItem {
+	constructor(weapon, pos, vel, size) {
+		super(pos, vel, size);
+
+		this.weapon = weapon
+		this.sprite = this.weapon.sprite
+
+	}
+	onPickup(entity) {
+		emitParticles(SmokeParticle, this.pos, this.size/2, 3, null)
+		plr.inv.push(this.weapon)
+		killEntity(this)
+	}
+	render(dt, elapsed, tickDelta, t) {
+		let framePos = vec.add(vec.lerp(this._pos, this.pos, tickDelta), camera.framePos)
+		let frameRot = 0
+
+		renderSprite(this.sprite, vec.add(framePos, vec.new(0, Math.sin(elapsed/150)*3, 0)), 0, this.size, (deg.rotate(this.rot, 90) > 180))
+		displayString(this.weapon.name, vec.add(framePos, vec.new(this.size/2, 0)), elapsed)
+	}
+}
+
+class ItemPowerup extends BaseItem {
+	constructor(pos, vel, size) {
+		super(pos, vel, size);
+
+		this.powers = []
+
+		for (let i = 0; i < getRandomInt(2, 3); i++){
+			this.addRandomPower()
+		}
+	}
+	powerups = [
+		{
+			name: "25% faster cooldown",
+			sprite: sprites.pw_lower_cooldown,
+			tag: "cooldown",
+			incompats: ["cooldown"],
+			func: function(weapon){
+				weapon.cooldown *= 0.75
+			},
+		},
+		{
+			name: "50% less spread",
+			sprite: sprites.pw_lower_spread,
+			tag: "spread",
+			incompats: ["spread"],
+			func: function(weapon){
+				weapon.spread *= 0.5
+			},
+		},
+		{
+			name: "30% more spread",
+			sprite: sprites.pw_higher_spread,
+			tag: "spread",
+			incompats: ["spread"],
+			func: function(weapon){
+				weapon.spread = Math.max(weapon.spread, 5) * 1.3
+			},
+		},
+		{
+			name: "15% slower cooldown",
+			sprite: sprites.pw_higher_cooldown,
+			tag: "cooldown",
+			incompats: ["cooldown"],
+			func: function(weapon){
+				weapon.cooldown *= 1.15
+			},
+		},
+		{
+			name: "+1 bullet per shot",
+			sprite: sprites.pw_bullet,
+			tag: "bullet",
+			incompats: [],
+			func: function(weapon){
+				weapon.amount ++
+			},
+		},
+	]
+	addRandomPower(){
+		while (true){
+			const newPower = this.powerups[getRandomInt(0, this.powerups.length-1)]
+
+			if (this.powers.includes(newPower)){continue}
+
+			let fail = false
+			for (let i in this.powers){
+				const power = this.powers[i]
+				if (power.incompats.includes(newPower.tag) || newPower.incompats.includes(power.tag)){
+					fail = true
+					break
+				}
+			}
+			if (fail){continue}
+			
+			this.powers.push(newPower)
+			break
+		}
+	}
+	onPickup(entity) {
+		if (plr.weapon.powerups >= 3){return}
+		plr.weapon.powerups ++
+		emitParticles(SmokeParticle, this.pos, this.size/2, 3, null)
+		for (let i in this.powers){
+			const power = this.powers[i]
+			power.func(plr.weapon)
+		}
+		playSnd("powerup")
+		killEntity(this)
+	}
+	render(dt, elapsed, tickDelta, t) {
+		let framePos = vec.add(vec.lerp(this._pos, this.pos, tickDelta), camera.framePos)
+		let frameRot = 0
+
+		const s = (16+Math.sin(elapsed/400)*16)
+		renderSprite(sprites.orb, vec.sub(framePos, vec.new(s/2, s/2)), elapsed/6, this.size+s)
+		for (let i in this.powers){
+			const power = this.powers[i]
+			const t = elapsed/600 + (i * (Math.PI * 2 / this.powers.length))
+			renderSprite(power.sprite, vec.add(framePos, vec.new(Math.cos(t)*24, Math.sin(t)*24)), 0, this.size)
+			displayString(power.name, vec.add(framePos, vec.new(this.size/2, -i*32)), elapsed)
+		}
+	}
+}
+
+class ItemHeal extends BaseItem {
+	constructor(pos, vel, size) {
+		super(pos, vel, size);
+		this.sprite = sprites.heart
+	}
+	addRandomPower(){
+		this.powers.push(this.powerups[getRandomInt(0, this.powerups.length-1)])
+	}
+	onPickup(entity) {
+		emitParticles(SmokeParticle, this.pos, this.size/2, 3, null)
+		plr.health = Math.min(plr.health+50, plr.maxHealth)
+		playSnd("powerup")
+		killEntity(this)
+	}
+	render(dt, elapsed, tickDelta, t) {
+		let framePos = vec.add(vec.lerp(this._pos, this.pos, tickDelta), camera.framePos)
+
+		renderSprite(this.sprite, vec.add(framePos, vec.new(0, Math.sin(elapsed/150)*3, 0)), 0, this.size)
+		displayString("+50 HP", vec.add(framePos, vec.new(this.size/2, 0)), elapsed)
+	}
+}
+
+
 
 class LivingEntity extends BaseEntity {
 	constructor(pos, rot, vel, velDamp, size) {
@@ -524,7 +884,9 @@ class Projectile extends BaseEntity {
 			const died = attackEntity(entity, this.hitDamage, this.targetNormal, 20)
 			if (died) {camera.screenshake += 3}
 			killEntity(this)
+			return true
 		}
+		return false
 	}
 	_tick(t) {
 		this.lifetime = this.lifetime - 1
@@ -532,8 +894,8 @@ class Projectile extends BaseEntity {
 		
 		for (let j in this.overlapping) {
 			let entity = this.overlapping[j]
-			this.onHit(entity)
-			return
+			const didHit = this.onHit(entity)
+			if (didHit){return}
 		}
 	}
 	tick(t) {
@@ -566,7 +928,9 @@ class PlayerProjectile extends Projectile {
 			const died = attackEntity(entity, this.hitDamage, this.targetNormal, this.knockback)
 			if (died) {camera.screenshake += 3}
 			killEntity(this)
+			return true
 		}
+		return false
 	}
 	render(dt, elapsed, tickDelta, t) {
 		let framePos = vec.add(vec.lerp(this._pos, this.pos, tickDelta), camera.framePos)
@@ -578,7 +942,6 @@ class TestProj extends PlayerProjectile {
 	constructor(pos, rot, damage, speed, velDamp, size) {
 		super(pos, rot, damage, speed, velDamp, size);
 		
-		this.hitDamage = 5
 		this.knockback = 15
 
 		this.sprite = sprites.bullet
@@ -608,16 +971,9 @@ class EnemyProjectile extends Projectile {
 			camera.screenshake += 3
 			const died = attackEntity(entity, this.hitDamage, this.targetNormal, 40)
 			killEntity(this)
+			return true
 		}
-	}
-	tick(t) {
-		for (let j in this.overlapping) {
-			let entity = this.overlapping[j]
-			this.onHit(entity)
-			return
-		}
-		this.lifetime = this.lifetime - 1
-		if (this.lifetime <= 0){killEntity(this)}
+		return false
 	}
 	render(dt, elapsed, tickDelta, t) {
 		let framePos = vec.add(vec.lerp(this._pos, this.pos, tickDelta), camera.framePos)
@@ -638,23 +994,28 @@ class ControllerEntity extends LivingEntity {
 		};
 		this.attackCooldown = 0
 		this.inv = [
-			new WeaponPistol(),
-			new WeaponShawty(),
-			new WeaponRifle(),
+			new WeaponPistol()
 		]
 		this.equippedSlot = 0
 		this.weapon = this.inv[this.equippedSlot]
 		this._weaponNormal = vec.new(0, 0, 0)
 		this.weaponNormal = vec.new(0, 0, 0)
+		this.coins = 0
 	}
 	equipWeapon(slot) {
 		this.equippedSlot = slot
 		this.weapon = this.inv[this.equippedSlot]
 	}
+	dropEquippedWeapon() {
+		if (this.inv.length == 1){return}
+		entities.push(new ItemWeapon(this.weapon, this.pos, vec.new(0, -15, 0)))
+		this.inv.splice(this.equippedSlot, 1)
+		this.equipWeapon(Math.max(0, this.equippedSlot-1))
+	}
 	render(dt, elapsed, tickDelta, t) {
 		let framePos = vec.add(vec.lerp(this._pos, this.pos, tickDelta), camera.framePos)
 		let frameRot = 0
-		if (vec.magnitude(this.vel) > 1){
+		if (vec.magnitudeSquared(this.vel) > 1){
 			framePos.y -= Math.abs(Math.sin(t*1.5)*10)
 			frameRot = Math.sin(t*1.5)*10
 		}
@@ -663,7 +1024,7 @@ class ControllerEntity extends LivingEntity {
 
 		renderSprite(this.weapon.sprite, vec.add(vec.sub(framePos, vec.new(this.size/2, this.size/2)), vec.lerp(this._weaponNormal, this.weaponNormal, tickDelta)), deg.slerp(this._rot, this.rot, tickDelta), this.size*2, false, null, (deg.rotate(this.rot, 90) > 180))
 
-		debugText(framePos, Math.round(this.health))
+		//debugText(framePos, Math.round(this.health))
 	}
 	tick(t) {
 		const relativePos = vec.add(this.pos, camera.framePos)
@@ -701,6 +1062,7 @@ class ControllerEntity extends LivingEntity {
 			this.attackCooldown = this.weapon.cooldown
 			camera.screenshake += this.weapon.screenshake
 			emitParticles(SmokeParticle, vec.add(this.pos, this.weaponNormal), this.size/2, 3, this.targetNormal)
+			playSnd("shoot")
 			for (let i = 0; i < this.weapon.amount; i++){
 				entities.push(new this.weapon.projectile(this.pos, deg.rotate(this.rot, (Math.random()-0.5)*this.weapon.spread), this.weapon.damage))
 			}
@@ -711,6 +1073,8 @@ class ControllerEntity extends LivingEntity {
 	}
 	death() {
 		console.log("Player has died")
+		playSnd("death")
+		music.playbackRate = 0.5
 	}
 }
 
@@ -724,6 +1088,8 @@ class Coin extends BaseEntity {
 		this.ignoreCollisions = true
 	}
 	onCollect(entity){
+		plr.coins = plr.coins + 1
+		playSnd("coin")
 		killEntity(this)
 	}
 	tick(t) {
@@ -818,7 +1184,7 @@ class Slime extends EnemyBase {
 		framePos.y -= lerp(this._jumpY, this.jumpY, tickDelta)
 
 		renderSprite(this.sprite, framePos, frameRot, this.size, (deg.rotate(this.rot, 90) > 180), (this.impactTicks > 0))
-		debugText(framePos, Math.round(this.jumpCooldown))
+		//debugText(framePos, Math.round(this.jumpCooldown))
 	}
 	death() {
 		emitParticles(SlimeParticle, this.pos, this.size/2)
@@ -846,7 +1212,7 @@ class Skeleton extends EnemyBase {
 		this.targetNormal = deg.getNormalVec(this.rot)
 
 		
-		const plrDist = vec.magnitude(vec.sub(plr.pos, this.pos))
+		const plrDist = vec.magnitudeSquared(vec.sub(plr.pos, this.pos))
 		if (plrDist > 200){
 			this.vel = vec.add(this.vel, vec.mulNum(this.targetNormal, 2))
 		}else{
@@ -862,13 +1228,13 @@ class Skeleton extends EnemyBase {
 	render(dt, elapsed, tickDelta, t) {
 		let framePos = vec.add(vec.lerp(this._pos, this.pos, tickDelta), camera.framePos)
 		let frameRot = 0
-		if (vec.magnitude(this.vel) > 1){
+		if (vec.magnitudeSquared(this.vel) > 1){
 			framePos.y -= Math.abs(Math.sin(t*1.5)*10)
 			frameRot = Math.sin(t*1.5)*10
 		}
 
 		renderSprite(this.sprite, framePos, frameRot, this.size, (deg.rotate(this.rot, 90) > 180), (this.impactTicks > 0))
-		debugText(framePos, Math.round(this.health))
+		//debugText(framePos, Math.round(this.health))
 	}
 	death() {
 		emitParticles(BoneParticle, this.pos, this.size/2)
@@ -876,40 +1242,141 @@ class Skeleton extends EnemyBase {
 	}
 }
 
+class Charger extends EnemyBase {
+	constructor(pos, rot, vel, velDamp, size) {
+		super(pos, rot, vel, velDamp, size); // call the parent constructor
+		this.targetNormal = vec.new(0, 0)
+		this.damage = 25
+		this.maxHealth = 25
+		this.health = this.maxHealth
+		this.attackCooldown = 10
+		this.charging = 0
+	}
+	tick(t) {
+		this._tick(t)
 
+		let s = Math.floor((t/5))
+		this.sprite = 	(s % 2 == 0 && sprites.charger_idle1) || 
+						sprites.charger_idle1
+		
+		if (this.charging > 0){
+			this.charging = this.charging - 1
+			this.vel = vec.add(this.vel, vec.mulNum(this.targetNormal, 12))
+			return
+		}
+		this.rot = deg.getDegreePointing(this.midPos, plr.midPos)
+		this.targetNormal = deg.getNormalVec(this.rot)
 
-let plr = new ControllerEntity(null, null, null, null, null)
-entities.push(plr)
+		
+		const plrDist = vec.magnitudeSquared(vec.sub(plr.pos, this.pos))
+		if (plrDist > 200){
+			this.vel = vec.add(this.vel, vec.mulNum(this.targetNormal, 4))
+		}else{
+			if (this.attackCooldown > 0){this.attackCooldown = this.attackCooldown - 1}
+			if (this.attackCooldown <= 0){
+				this.attackCooldown = 15
+				
+				this.charging = 30
+				emitParticles(SmokeParticle, this.pos, this.size/2, 3, vec.mulNum(this.targetNormal, -1))
+			}
+		}
+	}
+	render(dt, elapsed, tickDelta, t) {
+		let framePos = vec.add(vec.lerp(this._pos, this.pos, tickDelta), camera.framePos)
+		let frameRot = 0
+		if (vec.magnitudeSquared(this.vel) > 1){
+			framePos.y -= Math.abs(Math.sin(t*1.5)*10)
+			frameRot = Math.sin(t*1.5)*10
+		}
 
-
-for (let i = 0; i < 2; i++){
-	entities.push(new Skeleton(vec.new(128, i*32)))
+		renderSprite(this.sprite, framePos, frameRot, this.size, (deg.rotate(this.rot, 90) > 180), (this.impactTicks > 0))
+		//debugText(framePos, Math.round(this.health))
+	}
+	death() {
+		emitParticles(BoneParticle, this.pos, this.size/2)
+		spawnCoins(this.pos, 2)
+	}
 }
-for (let i = 0; i < 8; i++){
-	entities.push(new Slime(vec.new(60, i*32)))
+
+let plr = null
+function restart(){
+	music.playbackRate = 1
+	entities = []
+	plr = new ControllerEntity(null, null, null, null, null)
+	entities.push(plr)
+	camera.pos = vec.new(0, 0)
+	console.log("Started new game")
+}
+restart()
+
+
+//entities.push(new Skeleton(vec.new(128, i*32)))
+//entities.push(new Slime(vec.new(60, i*16)))
+
+function getSpawn(){
+	const screen = Math.max(canvas.height, canvas.width)/2
+	const radius = screen+500
+	const minDist = screen
+	while (true){
+		const rand = vec.mulNum(vec.new(Math.random()-0.5, Math.random()-0.5), 2)
+		const pos = vec.add(plr.pos, vec.mulNum(rand, radius))
+		const diff = vec.sub(plr.pos, pos)
+		const dist = vec.magnitudeSquared(diff)
+		if (dist > minDist){
+			return pos
+		}
+	}
 }
 
+setInterval(() => {
+	if (plr.health <= 0){return}
 
-entities.push(new BaseEntity(vec.new(60, 0)))
+	for (let i = 0; i < 4; i++){
+		entities.push(new Slime(getSpawn()))
+		if (Math.random() > 0.9){
+			entities.push(new Skeleton(getSpawn()))
+		}
+		if (Math.random() > 0.9){
+			entities.push(new Charger(getSpawn()))
+		}
+	}
 
+}, 7000);
+
+setInterval(() => {
+	if (plr.health <= 0){return}
+
+	if (Math.random() > 0.8){
+		entities.push(new Chest(getSpawn()))
+	}
+
+}, 400);
 
 //RENDERING
 
 function render(dt, elapsed, tickDelta) {
 
-	ctx.font = "bold 32px cursive"
-	ctx.fillStyle = "rgb(75, 75, 75)"
-	function displayString(str, x, y) {
-		for (let i = 0; i < str.length; i++) {
-			const letter = str[i]
-			const pos = {
-				x: x + i * 30,
-				y: y + Math.sin(elapsed * 0.005 + i) * 5
-			}
-			ctx.fillText(letter, pos.x, pos.y);
+	if (plr.health <= 0){
+		ctx.fillStyle = "rgba(200, 0, 0, 0.7)"
+		ctx.fillRect(0, 0, canvas.width, canvas.height)
+		displayString("space to restart", middlePos, elapsed, "white")
+	}
+
+	
+	displayString("HP: "+(Math.round((plr.health/plr.maxHealth)*100))+"%", vec.new(5, 50), elapsed, (plr.health < plr.maxHealth/3 && "rgb(200, 0, 0)"), true)
+	displayString("COINS: "+(plr.coins), vec.new(5, 100), elapsed, null, true)
+
+	for (let i in plr.inv){
+		const weapon = plr.inv[i]
+		const isEquipped = (plr.equippedSlot == i)
+
+		const weaponPos = vec.new((isEquipped && 16) || 0, canvas.height-i*56 - 128)
+		renderSprite(weapon.sprite, weaponPos, 0, 128)
+
+		for (let i = 0; i < 3; i++){
+			renderSprite(((i < weapon.powerups && sprites.star) || sprites.star_empty), vec.add(weaponPos, vec.new(4, i*19-19 + 128/2)), 0, 16)
 		}
 	}
-	displayString("HP: "+(Math.round((plr.health/plr.maxHealth)*100))+"%", 20, 50)
 }
 
 
@@ -982,9 +1449,13 @@ function tick(t) {
 
 	//console.log(plr.pos)
 	entities.sort((a, b) => a.pos.y - b.pos.y);
-	for (let i in entities) {
-		let entity = entities[i]
+	//for (let i in entities) {
+		//let entity = entities[i]
 
+		
+	//}
+
+	entities.forEach(function(entity){
 		entity.overlapping = []
 		for (let j in entities) {
 			let entityB = entities[j]
@@ -1010,7 +1481,7 @@ function tick(t) {
 		entity.pos = vec.add(entity.pos, entity.vel)
 		entity.midPos = vec.add(entity.pos, vec.divNum(vec.new(entity.size, entity.size), 2))
 		entity.tick(t)
-	}
+	})
 
 	for (let i in particles) {
 		let particle = particles[i]
@@ -1031,7 +1502,7 @@ function tick(t) {
 	const camTarget = vec.mulNum(vec.add(pos, vec.new(-canvas.width / 2, -canvas.height / 2)), -1)
 	camera.pos = vec.lerp(camera.pos, camTarget, 0.1)
 
-	if (camera.screenshake > 0) { camera.screenshake -= dt * 10 }
+	if (camera.screenshake > 0) { camera.screenshake *= 0.7 }
 
 }
 gameLoop(performance.now())
@@ -1058,9 +1529,23 @@ document.addEventListener("keydown", function (event) {
 		return
 	}
 	if (event.key.toLowerCase() === " ") {
-		plr.inputs.attack = true
+		plr.inputs.space = true
+		if (plr.health <= 0){
+			restart()
+		}
 		return
 	}
+	if (event.key.toLowerCase() === "q") {
+		plr.dropEquippedWeapon()
+		return
+	}
+})
+
+document.addEventListener("mousedown", function (event) {
+	plr.inputs.attack = true
+})
+document.addEventListener("mouseup", function (event) {
+	plr.inputs.attack = false
 })
 
 document.addEventListener("keyup", function (event) {
@@ -1081,7 +1566,12 @@ document.addEventListener("keyup", function (event) {
 		return
 	}
 	if (event.key.toLowerCase() === " ") {
-		plr.inputs.attack = false
+		plr.inputs.space = false
+		return
+	}
+	const num = Number(event.key)
+	if (num) {
+		plr.equipWeapon(clamp(num-1, 0, plr.inv.length-1))
 		return
 	}
 })
@@ -1099,4 +1589,5 @@ document.addEventListener("wheel", function (event) {
 
 	plr.equipWeapon(newSlot)
 })
+
 
