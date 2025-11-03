@@ -30,6 +30,31 @@ const imgSources = [
 	},
 
 	{
+		name: "bigslime_idle1",
+		src: "./sprites/enemies/bigslime/bigslime_idle1.png",
+	},
+	{
+		name: "bigslime_idle2",
+		src: "./sprites/enemies/bigslime/bigslime_idle2.png",
+	},
+	{
+		name: "bigslime_jump",
+		src: "./sprites/enemies/bigslime/bigslime_jump.png",
+	},
+	{
+		name: "bigslime_charge",
+		src: "./sprites/enemies/bigslime/bigslime_charge.png",
+	},
+	{
+		name: "bigslime_particle1",
+		src: "./sprites/enemies/bigslime/bigslime_particle1.png",
+	},
+	{
+		name: "bigslime_particle2",
+		src: "./sprites/enemies/bigslime/bigslime_particle2.png",
+	},
+
+	{
 		name: "skeleton_idle1",
 		src: "./sprites/enemies/skeleton/skeleton_idle1.png",
 	},
@@ -67,6 +92,10 @@ const imgSources = [
 	{
 		name: "shadow",
 		src: "./sprites/enemies/shadow.png",
+	},
+	{
+		name: "shadow_big",
+		src: "./sprites/enemies/shadow_big.png",
 	},
 
 	{
@@ -364,8 +393,8 @@ function debugText(pos, text){
 	ctx.fillText(text, pos.x, pos.y);
 }
 
-function renderShadow(framePos, size){
-	ctx.drawImage(sprites.shadow, framePos.x, framePos.y, size, size)
+function renderShadow(sprite, framePos, size){
+	ctx.drawImage(sprite, framePos.x, framePos.y, size, size)
 }
 function renderSprite(sprite, pos, rot, size, flip, bright, flipY){
 	const angleInRadians = rot * Math.PI / 180
@@ -615,41 +644,40 @@ class BaseEntity {
 	}
 }
 
-class Chest extends BaseEntity {
+class BaseChest extends BaseEntity {
 	constructor(pos, rot, vel, velDamp, size) {
 		super(pos, rot, vel, velDamp, size);
 
 		this.sprite = sprites.chest
+		this.spriteOpen = sprites.chest_open
 		this.opened = false
 		this.ignoreCollisions = true
 
+		this.despawnsOffscreen = true
 		this.lifetime = 100
 		this.cost = 10
+		this.cost = Math.ceil(this.cost*priceMult)
 	}
-	onHit(entity) {
-		if (entity == plr && plr.inputs.space){
-			if (plr.coins < this.cost){return}
-			plr.coins = plr.coins - this.cost
-			this.opened = true
-			this.sprite = sprites.chest_open
-			emitParticles(SmokeParticle, this.pos, this.size/2, 3, null)
+	open(entity) {
+		
 			
-			if (Math.random() > 0.7){
-				entities.push(new ItemWeapon(getRandomWeapon(), vec.add(this.pos, vec.new(0, -64)), vec.new(0, -15, 0)))
-			}else if (Math.random() > 0.7){
-				entities.push(new ItemHeal(vec.add(this.pos, vec.new(0, -64)), vec.new(0, -15, 0)))
-			}else{
-				entities.push(new ItemPowerup(vec.add(this.pos, vec.new(0, -64)), vec.new(0, -15, 0)))
-			}
-			//plr.inv.push(getRandomWeapon())
+		if (Math.random() > 0.7){
+			entities.push(new ItemWeapon(getRandomWeapon(), vec.add(this.pos, vec.new(0, -64)), vec.new(0, -15, 0)))
+		}else if (Math.random() > 0.7){
+			entities.push(new ItemHeal(vec.add(this.pos, vec.new(0, -64)), vec.new(0, -15, 0)))
+		}else{
+			entities.push(new ItemPowerup(vec.add(this.pos, vec.new(0, -64)), vec.new(0, -15, 0)))
 		}
+	}
+	textRender(framePos, elapsed){
+		displayString("cost: "+this.cost, vec.add(framePos, vec.new(this.size/2, 0)), elapsed)
 	}
 	render(dt, elapsed, tickDelta, t){
 		let framePos = vec.add(vec.lerp(this._pos, this.pos, tickDelta), camera.framePos)
 		let frameRot = 0
 
 		renderSprite(this.sprite, framePos, 0, this.size, (deg.rotate(this.rot, 90) > 180))
-		if (this.opened == false){displayString("cost: "+this.cost, vec.add(framePos, vec.new(this.size/2, 0)), elapsed)}
+		if (this.opened == false){this.textRender(framePos, elapsed)}
 	}
 	tick(t) {
 		
@@ -661,11 +689,76 @@ class Chest extends BaseEntity {
 		
 		for (let j in this.overlapping) {
 			let entity = this.overlapping[j]
-			this.onHit(entity)
+			if (entity == plr && plr.inputs.space){
+				if (plr.coins < this.cost){return}
+				plr.coins = plr.coins - this.cost
+				this.opened = true
+				this.sprite = this.spriteOpen
+				emitParticles(SmokeParticle, this.pos, this.size/2, 3, null)
+				this.open(entity)
+			}
 		}
 
 	}
 }
+class ChestPowerup extends BaseChest {
+	constructor(pos, rot, vel, velDamp, size) {
+		super(pos, rot, vel, velDamp, size);
+
+		this.sprite = sprites.chest
+		this.spriteOpen = sprites.chest_open
+
+		this.cost = 10
+		this.cost = Math.ceil(this.cost*priceMult)
+	}
+	textRender(framePos, elapsed){
+		displayString("Powerup", vec.add(framePos, vec.new(this.size/2, -30)), elapsed)
+		displayString("cost: "+this.cost, vec.add(framePos, vec.new(this.size/2, 0)), elapsed)
+	}
+	open(entity) {
+		entities.push(new ItemPowerup(vec.add(this.pos, vec.new(0, -64)), vec.new(0, -15, 0)))
+	}
+}
+
+class ChestWeapon extends BaseChest {
+	constructor(pos, rot, vel, velDamp, size) {
+		super(pos, rot, vel, velDamp, size);
+
+		this.sprite = sprites.chest
+		this.spriteOpen = sprites.chest_open
+
+		this.cost = 20
+		this.cost = Math.ceil(this.cost*priceMult)
+	}
+	textRender(framePos, elapsed){
+		displayString("Weapon", vec.add(framePos, vec.new(this.size/2, -30)), elapsed)
+		displayString("cost: "+this.cost, vec.add(framePos, vec.new(this.size/2, 0)), elapsed)
+	}
+	open(entity) {
+		entities.push(new ItemWeapon(getRandomWeapon(), vec.add(this.pos, vec.new(0, -64)), vec.new(0, -15, 0)))
+	}
+}
+
+class ChestHeal extends BaseChest {
+	constructor(pos, rot, vel, velDamp, size) {
+		super(pos, rot, vel, velDamp, size);
+
+		this.sprite = sprites.chest
+		this.spriteOpen = sprites.chest_open
+
+		this.cost = 30
+		this.cost = Math.ceil(this.cost*priceMult)
+	}
+	textRender(framePos, elapsed){
+		displayString("Healing", vec.add(framePos, vec.new(this.size/2, -30)), elapsed)
+		displayString("cost: "+this.cost, vec.add(framePos, vec.new(this.size/2, 0)), elapsed)
+	}
+	open(entity) {
+		entities.push(new ItemHeal(vec.add(this.pos, vec.new(0, -64)), vec.new(0, -15, 0)))
+	}
+}
+
+
 
 class BaseItem extends BaseEntity {
 	constructor(pos, vel, size) {
@@ -853,6 +946,8 @@ class LivingEntity extends BaseEntity {
 		this.health = this.maxHealth
 
 		this.sprite = sprites.temp
+
+		this.spriteShadow = sprites.shadow
 	}
 	tick(t) {
 		
@@ -1147,16 +1242,21 @@ class Slime extends EnemyBase {
 		this.damage = 20
 		this.maxHealth = 20
 		this.health = this.maxHealth
+
+		this.spriteIdle1 = sprites.slime_idle1
+		this.spriteIdle2 = sprites.slime_idle2
+		this.spriteJump = sprites.slime_jump
+		this.spriteCharge = sprites.slime_charge
 	}
 	tick(t) {
 		this._tick(t)
 
 		let s = Math.floor((t/5))
 		const inAir = (this.jumpY > 0)
-		this.sprite = 	(inAir && sprites.slime_jump) || 
-						(this.jumpCooldown < 10 && sprites.slime_charge) || 
-						(s % 2 == 0 && sprites.slime_idle1) || 
-						sprites.slime_idle2
+		this.sprite = 	(inAir && this.spriteJump) || 
+						(this.jumpCooldown < 10 && this.spriteCharge) || 
+						(s % 2 == 0 && this.spriteIdle1) || 
+						this.spriteIdle2
 		
 		this.velDamp = (inAir && 0.95) || 0.8
 
@@ -1189,6 +1289,29 @@ class Slime extends EnemyBase {
 	death() {
 		emitParticles(SlimeParticle, this.pos, this.size/2)
 		spawnCoins(this.pos, 1)
+	}
+}
+
+class BigSlime extends Slime {
+	constructor(pos, rot, vel, velDamp, size) {
+		super(pos, rot, vel, velDamp, 128); // call the parent constructor
+		this.damage = 35
+		this.maxHealth = 60
+		this.health = this.maxHealth
+
+		this.spriteIdle1 = sprites.bigslime_idle1
+		this.spriteIdle2 = sprites.bigslime_idle2
+		this.spriteJump = sprites.bigslime_jump
+		this.spriteCharge = sprites.bigslime_charge
+
+		this.spriteShadow = sprites.shadow_big
+	}
+	death() {
+		emitParticles(SlimeParticle, this.pos, this.size/2)
+		for (let i = 0; i < 3; i++){
+			entities.push(new Slime(this.pos))
+		}
+		spawnCoins(this.pos, 3)
 	}
 }
 
@@ -1247,7 +1370,7 @@ class Charger extends EnemyBase {
 		super(pos, rot, vel, velDamp, size); // call the parent constructor
 		this.targetNormal = vec.new(0, 0)
 		this.damage = 25
-		this.maxHealth = 25
+		this.maxHealth = 40
 		this.health = this.maxHealth
 		this.attackCooldown = 10
 		this.charging = 0
@@ -1299,15 +1422,6 @@ class Charger extends EnemyBase {
 }
 
 let plr = null
-function restart(){
-	music.playbackRate = 1
-	entities = []
-	plr = new ControllerEntity(null, null, null, null, null)
-	entities.push(plr)
-	camera.pos = vec.new(0, 0)
-	console.log("Started new game")
-}
-restart()
 
 
 //entities.push(new Skeleton(vec.new(128, i*32)))
@@ -1328,33 +1442,182 @@ function getSpawn(){
 	}
 }
 
+let priceMult = 1
+let timeUntilWave = 2
+
+let waveDelay = 13
+let waveAmount = 3
+let enemyTable = [
+	{class: Slime, weight: 100},
+	{class: Skeleton, weight: 0},
+	{class: Charger, weight: 0},
+	{class: BigSlime, weight: 0},
+]
+
+
+const speedupDelay = 30
+let timeUntilSpeedup = speedupDelay
+
+const increaseDelay = 110
+let timeUntilIncrease = increaseDelay
+
+let difficulty = 0
+let difficultyTable = [
+	{
+		weights: {0: 100, 1: 0, 2: 0, 3: 0}, waveAmount: 3,
+	},
+	{
+		weights: {0: 50, 1: 20}, waveAmount: 3,
+	},
+	{
+		weights: {0: 50, 1: 20, 2: 6}, waveAmount: 4,
+	},
+	{
+		weights: {}, waveAmount: 5,
+	},
+	{
+		weights: {0: 20, 1: 20, 2: 30}, waveAmount: 4,
+	},
+	{
+		weights: {0: 5, 1: 20, 2: 60}, waveAmount: 5,
+	},
+	{
+		weights: {0: 0, 1: 20, 2: 60, 3: 5}, waveAmount: 7,
+	},
+]
+
+function weightedRNG(items) {
+  const totalWeight = items.reduce((sum, item) => sum + item.weight, 0);
+  const random = Math.random() * totalWeight;
+
+  let runningSum = 0;
+  for (const item of items) {
+    runningSum += item.weight;
+    if (random < runningSum) {
+      return item;
+    }
+  }
+}
+
+
+function spawnWave(){
+	for (let i = 0; i < waveAmount; i++){
+		const enemy = weightedRNG(enemyTable)
+		entities.push(new enemy.class(getSpawn()))
+	}
+}
+function updateDifficulty(){
+	const currentDiff = difficultyTable[difficulty]
+	for (let i in currentDiff.weights){
+		const weight = currentDiff.weights[i]
+		enemyTable[i].weight = weight
+	}
+	waveAmount = currentDiff.waveAmount
+}
+
 setInterval(() => {
 	if (plr.health <= 0){return}
 
-	for (let i = 0; i < 4; i++){
-		entities.push(new Slime(getSpawn()))
-		if (Math.random() > 0.9){
-			entities.push(new Skeleton(getSpawn()))
-		}
-		if (Math.random() > 0.9){
-			entities.push(new Charger(getSpawn()))
-		}
+	timeUntilWave --
+	//console.log(timeUntilWave, timeUntilSpeedup, timeUntilIncrease)
+	if (timeUntilWave <= 0){
+		spawnWave()
+		timeUntilWave = waveDelay
 	}
 
-}, 7000);
+	timeUntilSpeedup --
+	if (timeUntilSpeedup <= 0){
+		waveDelay = Math.ceil(waveDelay * 0.6)
+		timeUntilWave = Math.min(timeUntilWave, waveDelay)
+		timeUntilSpeedup = speedupDelay
+		console.log("Wavedelay changed to ", waveDelay)
+	}
+
+	timeUntilIncrease --
+	if (timeUntilIncrease <= 0){
+		difficulty ++
+		if (difficulty > difficultyTable.length-1) {difficulty = difficultyTable.length-1}
+		updateDifficulty()
+
+		priceMult += 0.2
+		waveDelay = 13
+		timeUntilSpeedup = speedupDelay
+		timeUntilIncrease = increaseDelay
+		console.log("Difficulty increased to", difficulty)
+	}
+	
+
+}, 1000);
+
+
+
+function restart(){
+	
+	priceMult = 1
+	
+	timeUntilSpeedup = speedupDelay
+	timeUntilIncrease = increaseDelay
+
+	timeUntilWave = 2
+	waveDelay = 13
+	waveAmount = 3
+
+	difficulty = 0
+	updateDifficulty()
+
+	music.playbackRate = 1
+	entities = []
+	plr = new ControllerEntity(null, null, null, null, null)
+	entities.push(plr)
+	camera.pos = vec.new(0, 0)
+	console.log("Started new game")
+}
+restart()
+
+
+
 
 setInterval(() => {
 	if (plr.health <= 0){return}
 
 	if (Math.random() > 0.8){
-		entities.push(new Chest(getSpawn()))
+		entities.push(new ChestWeapon(getSpawn()))
+	}else if (Math.random() > 0.8){
+		entities.push(new ChestHeal(getSpawn()))
+	}else{
+		entities.push(new ChestPowerup(getSpawn()))
 	}
 
-}, 400);
+}, 2000);
+
+
+let janitorIndex = 0
+
+setInterval(() => {
+	const screen = Math.max(canvas.height, canvas.width) / 2
+
+	if (janitorIndex > entities.length - 1) { janitorIndex = 0; return }
+
+	const entity = entities[janitorIndex]
+	if (entity.despawnsOffscreen) {
+		const dist = vec.magnitudeSquared(vec.sub(entity.pos, plr.pos))
+		if (dist > screen * 2) {
+			console.log("Despawned offscreen entity")
+			killEntity(entity)
+		}
+	}
+	janitorIndex++
+
+}, 50);
 
 //RENDERING
 
 function render(dt, elapsed, tickDelta) {
+	if (plr.inputs.pause){
+		ctx.fillStyle = "rgba(50, 50, 50, 0.7)"
+		ctx.fillRect(0, 0, canvas.width, canvas.height)
+		displayString("GAME PAUSED, B to unpause", middlePos, elapsed, "white")
+	}
 
 	if (plr.health <= 0){
 		ctx.fillStyle = "rgba(200, 0, 0, 0.7)"
@@ -1377,6 +1640,16 @@ function render(dt, elapsed, tickDelta) {
 			renderSprite(((i < weapon.powerups && sprites.star) || sprites.star_empty), vec.add(weaponPos, vec.new(4, i*19-19 + 128/2)), 0, 16)
 		}
 	}
+
+	ctx.fillStyle = "rgb(20, 2, 20)"
+	ctx.fillRect(canvas.width/2-150, 50, 300, 10)
+	ctx.fillStyle = "rgb(255, 170, 0)"
+	ctx.fillRect(canvas.width/2-150, 50, (timeUntilIncrease / increaseDelay)*300, 10)
+
+	displayString("Difficulty: "+((difficulty == difficultyTable.length-1 && "MAX") || difficulty), vec.new(canvas.width/2, 35), elapsed, "rgb(255, 170, 0)", false)
+
+	
+	
 }
 
 
@@ -1414,7 +1687,12 @@ function gameLoop(elapsed) {
 	for (let i in entities) {
 		let entity = entities[i]
 		let framePos = vec.add(vec.lerp(entity._pos, entity.pos, tickDelta), camera.framePos)
-		renderShadow(framePos, entity.size)
+		if (entity.spriteShadow){renderShadow(entity.spriteShadow, framePos, entity.size)}
+
+		//ctx.fillStyle = "rgba(230, 0, 0, 0.5)"
+		//const ps = vec.add(vec.add(entity.pos, vec.new(0, entity.size*0.5)), camera.framePos)
+		//ctx.fillRect(ps.x, ps.y, entity.size, entity.size*0.5)
+		
 	}
 
 
@@ -1447,6 +1725,8 @@ function tick(t) {
 
 	const dt = tickTime / 1000
 
+	if (plr.inputs.pause){return}
+
 	//console.log(plr.pos)
 	entities.sort((a, b) => a.pos.y - b.pos.y);
 	//for (let i in entities) {
@@ -1460,8 +1740,8 @@ function tick(t) {
 		for (let j in entities) {
 			let entityB = entities[j]
 			if (entityB != entity && rectOverlappingRect(
-				vec.add(entityB.pos, vec.new(entityB.size, entityB.size*0.5)), vec.new(entityB.size, entityB.size*0.5), 
-				vec.add(entity.pos, vec.new(entity.size, entity.size*0.5)), vec.new(entity.size, entity.size*0.5))
+				vec.add(entityB.pos, vec.new(0, entityB.size*0.5)), vec.new(entityB.size, entityB.size*0.5), 
+				vec.add(entity.pos, vec.new(0, entity.size*0.5)), vec.new(entity.size, entity.size*0.5))
 			){
 				entity.overlapping.push(entityB)
 			}
@@ -1526,6 +1806,10 @@ document.addEventListener("keydown", function (event) {
 	}
 	if (event.key.toLowerCase() === "d") {
 		plr.inputs.d = true
+		return
+	}
+	if (event.key.toLowerCase() === "b") {
+		plr.inputs.pause = !plr.inputs.pause
 		return
 	}
 	if (event.key.toLowerCase() === " ") {
