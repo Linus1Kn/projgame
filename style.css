@@ -1,9 +1,20 @@
 body{
     display: flex;
+    flex-direction: column;
     justify-content: center;
     align-items: center;
     background-color: rgb(41, 41, 41);
-    margin-top: 3rem;
+}
+
+p{
+    color: rgb(155, 155, 155);
+    font-family: "Tiny5", cursive, sans-serif;
+    margin-top: 0;
+}
+
+.controls-container{
+    display: flex;
+    gap: 3rem;
 }
 
 canvas{

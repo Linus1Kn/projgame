@@ -71,6 +71,14 @@ const imgSources = [
 		name: "charger_idle1",
 		src: "./sprites/enemies/charger/charger_idle1.png",
 	},
+	{
+		name: "charger_particle1",
+		src: "./sprites/enemies/charger/charger_particle1.png",
+	},
+	{
+		name: "charger_particle2",
+		src: "./sprites/enemies/charger/charger_particle2.png",
+	},
 
 	{
 		name: "smoke_particle1",
@@ -130,6 +138,22 @@ const imgSources = [
 	{
 		name: "chest_open",
 		src: "./sprites/chests/chest_open.png",
+	},
+	{
+		name: "chest_weapon",
+		src: "./sprites/chests/chest_weapon.png",
+	},
+	{
+		name: "chest_weapon_open",
+		src: "./sprites/chests/chest_weapon_open.png",
+	},
+	{
+		name: "chest_heal",
+		src: "./sprites/chests/chest_heal.png",
+	},
+	{
+		name: "chest_heal_open",
+		src: "./sprites/chests/chest_heal_open.png",
 	},
 	{
 		name: "coin",
@@ -457,7 +481,7 @@ function displayString(str, pos, elapsed, color, rightAlign) {
 		ctx.fillStyle = color || "rgb(75, 75, 75)"
 		for (let i = 0; i < str.length; i++) {
 			const letter = str[i]
-			ctx.fillText(letter, pos.x + ((rightAlign && (i+1)) || (i - str.length/2)) * letterSize + (letterSize/2), pos.y + (elapsed && Math.sin(elapsed * 0.005 + i) * 5) || 0);
+			ctx.fillText(letter, pos.x + ((rightAlign && (i+1)) || (i - str.length/2)) * letterSize + (letterSize/2), pos.y + (elapsed && Math.sin(elapsed * 0.007 + i) * 2) || 0);
 		}
 	}
 
@@ -533,6 +557,12 @@ class BoneParticle extends GravParticle {
 		this.sprite = (getRandomInt(1, 2) == 1 && sprites.bone_particle1) || sprites.bone_particle2
 	}
 }
+class ChargerParticle extends GravParticle {
+	constructor(pos, vel, velDamp, grav, lifetime, normal) {
+		super(pos, vel, velDamp, grav, lifetime, normal);
+		this.sprite = (getRandomInt(1, 2) == 1 && sprites.charger_particle1) || sprites.charger_particle2
+	}
+}
 class SmokeParticle extends BaseParticle {
 	constructor(pos, vel, velDamp, grav, lifetime, normal) {
 		super(pos, vel, velDamp, grav, lifetime, normal);
@@ -561,7 +591,7 @@ class WeaponPistol extends BaseWeapon {
 		this.name = "Pistol"
 		this.damage = 5
 		this.cooldown = 10
-		this.spread = 0
+		this.spread = 7
 		this.amount = 1
 		this.projectile = PlayerProjectile
 		this.sprite = sprites.pistol
@@ -573,9 +603,9 @@ class WeaponTommy extends BaseWeapon {
 	constructor() {
 		super()
 		this.name = "Tommy"
-		this.damage = 2
+		this.damage = 3
 		this.cooldown = 4
-		this.spread = 10
+		this.spread = 15
 		this.amount = 1
 		this.projectile = PlayerProjectile
 		this.sprite = sprites.tommy
@@ -588,7 +618,7 @@ class WeaponRifle extends BaseWeapon {
 		super()
 		this.name = "Rifle"
 		this.damage = 25
-		this.cooldown = 30
+		this.cooldown = 35
 		this.spread = 0
 		this.amount = 1
 		this.projectile = PlayerProjectile
@@ -601,7 +631,7 @@ class WeaponShotgun extends BaseWeapon{
 	constructor() {
 		super()
 		this.name = "Shotty"
-		this.damage = 4
+		this.damage = 5
 		this.cooldown = 20
 		this.spread = 30
 		this.amount = 5
@@ -724,8 +754,8 @@ class ChestWeapon extends BaseChest {
 	constructor(pos, rot, vel, velDamp, size) {
 		super(pos, rot, vel, velDamp, size);
 
-		this.sprite = sprites.chest
-		this.spriteOpen = sprites.chest_open
+		this.sprite = sprites.chest_weapon
+		this.spriteOpen = sprites.chest_weapon_open
 
 		this.cost = 20
 		this.cost = Math.ceil(this.cost*priceMult)
@@ -743,8 +773,8 @@ class ChestHeal extends BaseChest {
 	constructor(pos, rot, vel, velDamp, size) {
 		super(pos, rot, vel, velDamp, size);
 
-		this.sprite = sprites.chest
-		this.spriteOpen = sprites.chest_open
+		this.sprite = sprites.chest_heal
+		this.spriteOpen = sprites.chest_heal_open
 
 		this.cost = 30
 		this.cost = Math.ceil(this.cost*priceMult)
@@ -1021,7 +1051,7 @@ class PlayerProjectile extends Projectile {
 	onHit(entity) {
 		if (entity.maxHealth && entity.isEnemy){
 			const died = attackEntity(entity, this.hitDamage, this.targetNormal, this.knockback)
-			if (died) {camera.screenshake += 3}
+			if (died) {camera.screenshake += 3; currentKills++}
 			killEntity(this)
 			return true
 		}
@@ -1045,7 +1075,7 @@ class TestProj extends PlayerProjectile {
 
 		this.targetNormal = deg.getNormalVec(this.rot)
 		this.vel = vec.mulNum(this.targetNormal, speed || 50+Math.random()*15)
-		this.velDamp = 0.9
+		this.velDamp = 0.96
 	}
 }
 
@@ -1168,6 +1198,14 @@ class ControllerEntity extends LivingEntity {
 	}
 	death() {
 		console.log("Player has died")
+		if (currentScore > highScore){
+			highScore = currentScore
+			localStorage.setItem("score", currentScore)
+		}
+		if (currentKills > highKills){
+			highKills = currentKills
+			localStorage.setItem("kills", currentKills)
+		}
 		playSnd("death")
 		music.playbackRate = 0.5
 	}
@@ -1181,6 +1219,7 @@ class Coin extends BaseEntity {
 		this.velDamp = 1
 		this.moveCooldown = 3
 		this.ignoreCollisions = true
+		this.despawnsOffscreen = true
 	}
 	onCollect(entity){
 		plr.coins = plr.coins + 1
@@ -1201,9 +1240,12 @@ class Coin extends BaseEntity {
 			return
 		}
 
-		const rot = deg.getDegreePointing(this.midPos, plr.midPos)
-		this.targetNormal = deg.getNormalVec(rot)
-		this.vel = vec.add(this.vel, vec.mulNum(this.targetNormal, 25))
+		const dist = vec.magnitudeSquared((vec.sub(plr.midPos, this.midPos)))
+		if (dist < 256){
+			const rot = deg.getDegreePointing(this.midPos, plr.midPos)
+			this.targetNormal = deg.getNormalVec(rot)
+			this.vel = vec.add(this.vel, vec.mulNum(this.targetNormal, 25))
+		}
 	}
 }
 
@@ -1295,8 +1337,8 @@ class Slime extends EnemyBase {
 class BigSlime extends Slime {
 	constructor(pos, rot, vel, velDamp, size) {
 		super(pos, rot, vel, velDamp, 128); // call the parent constructor
-		this.damage = 35
-		this.maxHealth = 60
+		this.damage = 50
+		this.maxHealth = 70
 		this.health = this.maxHealth
 
 		this.spriteIdle1 = sprites.bigslime_idle1
@@ -1416,7 +1458,7 @@ class Charger extends EnemyBase {
 		//debugText(framePos, Math.round(this.health))
 	}
 	death() {
-		emitParticles(BoneParticle, this.pos, this.size/2)
+		emitParticles(ChargerParticle, this.pos, this.size/2)
 		spawnCoins(this.pos, 2)
 	}
 }
@@ -1442,6 +1484,12 @@ function getSpawn(){
 	}
 }
 
+let currentScore = 0
+let highScore = localStorage.getItem("score") || 0
+
+let currentKills = 0
+let highKills = localStorage.getItem("kills") || 0
+
 let priceMult = 1
 let timeUntilWave = 2
 
@@ -1453,7 +1501,6 @@ let enemyTable = [
 	{class: Charger, weight: 0},
 	{class: BigSlime, weight: 0},
 ]
-
 
 const speedupDelay = 30
 let timeUntilSpeedup = speedupDelay
@@ -1516,7 +1563,7 @@ function updateDifficulty(){
 }
 
 setInterval(() => {
-	if (plr.health <= 0){return}
+	if (plr.health <= 0 || plr.inputs.pause){return}
 
 	timeUntilWave --
 	//console.log(timeUntilWave, timeUntilSpeedup, timeUntilIncrease)
@@ -1552,7 +1599,7 @@ setInterval(() => {
 
 
 function restart(){
-	
+	currentScore = 0
 	priceMult = 1
 	
 	timeUntilSpeedup = speedupDelay
@@ -1578,7 +1625,7 @@ restart()
 
 
 setInterval(() => {
-	if (plr.health <= 0){return}
+	if (plr.health <= 0 || plr.inputs.pause){return}
 
 	if (Math.random() > 0.8){
 		entities.push(new ChestWeapon(getSpawn()))
@@ -1589,6 +1636,13 @@ setInterval(() => {
 	}
 
 }, 2000);
+
+setInterval(() => {
+	if (plr.health <= 0 || plr.inputs.pause){return}
+
+	currentScore++
+
+}, 1000);
 
 
 let janitorIndex = 0
@@ -1612,17 +1666,29 @@ setInterval(() => {
 
 //RENDERING
 
+function renderScores(elapsed){
+	displayString("Current Stats", vec.add(middlePos, vec.new(0, -60)), elapsed, "rgb(210, 210, 210)")
+	displayString("score: "+currentScore, vec.add(middlePos, vec.new(0, -20)), elapsed, "yellow")
+	displayString("kills: "+currentKills, vec.add(middlePos, vec.new(0, 20)), elapsed, "yellow")
+
+	displayString("Personal Best", vec.add(middlePos, vec.new(0, 80)), elapsed, "rgb(210, 210, 210)")
+	displayString("score: "+highScore, vec.add(middlePos, vec.new(0, 120)), elapsed, "orange")
+	displayString("kills: "+highKills, vec.add(middlePos, vec.new(0, 160)), elapsed, "orange")
+}
+
 function render(dt, elapsed, tickDelta) {
 	if (plr.inputs.pause){
 		ctx.fillStyle = "rgba(50, 50, 50, 0.7)"
 		ctx.fillRect(0, 0, canvas.width, canvas.height)
-		displayString("GAME PAUSED, B to unpause", middlePos, elapsed, "white")
+		renderScores(elapsed)
+		displayString("GAME PAUSED, B to unpause", vec.add(middlePos, vec.new(0, -120)), elapsed, "white")
 	}
 
 	if (plr.health <= 0){
 		ctx.fillStyle = "rgba(200, 0, 0, 0.7)"
 		ctx.fillRect(0, 0, canvas.width, canvas.height)
-		displayString("space to restart", middlePos, elapsed, "white")
+		renderScores(elapsed)
+		displayString("space to restart", vec.add(middlePos, vec.new(0, -120)), elapsed, "white")
 	}
 
 	
