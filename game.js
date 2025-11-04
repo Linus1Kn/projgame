@@ -81,12 +81,26 @@ const imgSources = [
 	},
 
 	{
+		name: "totem",
+		src: "./sprites/enemies/totem/totem.png",
+	},
+
+	{
 		name: "smoke_particle1",
 		src: "./sprites/generic/smoke_particle1.png",
 	},
 	{
 		name: "smoke_particle2",
 		src: "./sprites/generic/smoke_particle2.png",
+	},
+
+	{
+		name: "totem_particle1",
+		src: "./sprites/enemies/totem/totem_particle1.png",
+	},
+	{
+		name: "totem_particle2",
+		src: "./sprites/enemies/totem/totem_particle2.png",
 	},
 	
 	{
@@ -200,21 +214,30 @@ let sounds = {
 	damage: new Audio('./audio/damage.wav'),
 	hit: new Audio('./audio/hit.wav'),
 	shoot: new Audio('./audio/shoot.wav'),
-	coin: new Audio('./audio/coin.wav'),
+	coin: new Audio('./audio/coin.mp3'),
 	powerup: new Audio('./audio/powerup.wav'),
 	music: new Audio('./audio/nokia_blue_ice.wav'),
 	death: new Audio('./audio/death.wav'),
+
+	slime_death: new Audio('./audio/enemy/slime_death.mp3'),
+	skeleton_death: new Audio('./audio/enemy/skeleton_death.mp3'),
+	charger_death: new Audio('./audio/enemy/charger_death.mp3'),
+}
+for (let i in sounds){
+	const snd = sounds[i]
+	snd.preservesPitch = false
 }
 function playSnd(name) {
 	const snd = sounds[name]
 	snd.currentTime = 0;
+	snd.playbackRate = 0.8+Math.random()*0.4
 	snd.play();
 }
 
 const music = sounds["music"]
 music.loop = true
-music.playbackRate = 1
 music.preservesPitch = false
+music.playbackRate = 1
 
 async function tryPlayAudio() {
   try {
@@ -458,7 +481,7 @@ function damageEntity(entity, damage){
 	return false
 }
 function attackEntity(entity, damage, knockbackNormal, knockback){
-	entity.vel = vec.add(vec.mulNum(entity.vel, 0.5), vec.mulNum(knockbackNormal, knockback))
+	entity.vel = vec.add(vec.mulNum(entity.vel, 0.5), vec.mulNum(knockbackNormal, knockback*(entity.knockbackMultiplier)))
 	return damageEntity(entity, damage)
 }
 
@@ -470,6 +493,7 @@ function emitParticles(particleClass, pos, radius, amount, normal){
 }
 
 function spawnCoins(pos, amount){
+	currentScore += amount*scoreMult
 	for (let i = 0; i < (amount || 8); i++){
 		entities.push(new Coin(pos))
 	}
@@ -561,6 +585,12 @@ class ChargerParticle extends GravParticle {
 	constructor(pos, vel, velDamp, grav, lifetime, normal) {
 		super(pos, vel, velDamp, grav, lifetime, normal);
 		this.sprite = (getRandomInt(1, 2) == 1 && sprites.charger_particle1) || sprites.charger_particle2
+	}
+}
+class TotemParticle extends GravParticle {
+	constructor(pos, vel, velDamp, grav, lifetime, normal) {
+		super(pos, vel, velDamp, grav, lifetime, normal);
+		this.sprite = (getRandomInt(1, 2) == 1 && sprites.totem_particle1) || sprites.totem_particle2
 	}
 }
 class SmokeParticle extends BaseParticle {
@@ -978,6 +1008,7 @@ class LivingEntity extends BaseEntity {
 		this.sprite = sprites.temp
 
 		this.spriteShadow = sprites.shadow
+		this.knockbackMultiplier = 1
 	}
 	tick(t) {
 		
@@ -1241,7 +1272,7 @@ class Coin extends BaseEntity {
 		}
 
 		const dist = vec.magnitudeSquared((vec.sub(plr.midPos, this.midPos)))
-		if (dist < 256){
+		if (dist < 180){
 			const rot = deg.getDegreePointing(this.midPos, plr.midPos)
 			this.targetNormal = deg.getNormalVec(rot)
 			this.vel = vec.add(this.vel, vec.mulNum(this.targetNormal, 25))
@@ -1265,11 +1296,35 @@ class EnemyBase extends LivingEntity {
 		if (this.dmgCooldown > 0){this.dmgCooldown--}
 		if (this.impactTicks > 0){this.impactTicks--}
 	}
+	tick(t) {
+		this._tick(t)
+	}
 	render(dt, elapsed, tickDelta, t) {
 		let framePos = vec.add(vec.lerp(this._pos, this.pos, tickDelta), camera.framePos)
 		let frameRot = 0
 
 		renderSprite(this.sprite, framePos, frameRot, this.size, (deg.rotate(this.rot, 90) > 180), (this.impactTicks > 0))
+	}
+}
+
+class Totem extends EnemyBase {
+	constructor(pos, rot, vel, velDamp) {
+		super(pos, rot, vel, velDamp, 128); // call the parent constructor
+		this.maxHealth = 100
+		this.health = this.maxHealth
+		this.isEnemy = true
+		this.damage = null
+
+		this.sprite = sprites.totem
+		this.spriteShadow = sprites.shadow_big
+		this.despawnsOffscreen = true
+		this.knockbackMultiplier = 0
+	}
+	death() {
+		emitParticles(TotemParticle, this.pos, this.size/2)
+		speedupDelay = Math.max(speedupDelay-5, 3)
+		scoreMult++
+		//add athewrgheru
 	}
 }
 
@@ -1331,6 +1386,7 @@ class Slime extends EnemyBase {
 	death() {
 		emitParticles(SlimeParticle, this.pos, this.size/2)
 		spawnCoins(this.pos, 1)
+		playSnd("slime_death")
 	}
 }
 
@@ -1338,7 +1394,7 @@ class BigSlime extends Slime {
 	constructor(pos, rot, vel, velDamp, size) {
 		super(pos, rot, vel, velDamp, 128); // call the parent constructor
 		this.damage = 50
-		this.maxHealth = 70
+		this.maxHealth = 90
 		this.health = this.maxHealth
 
 		this.spriteIdle1 = sprites.bigslime_idle1
@@ -1354,6 +1410,7 @@ class BigSlime extends Slime {
 			entities.push(new Slime(this.pos))
 		}
 		spawnCoins(this.pos, 3)
+		playSnd("slime_death")
 	}
 }
 
@@ -1404,6 +1461,7 @@ class Skeleton extends EnemyBase {
 	death() {
 		emitParticles(BoneParticle, this.pos, this.size/2)
 		spawnCoins(this.pos, 3)
+		playSnd("skeleton_death")
 	}
 }
 
@@ -1460,6 +1518,7 @@ class Charger extends EnemyBase {
 	death() {
 		emitParticles(ChargerParticle, this.pos, this.size/2)
 		spawnCoins(this.pos, 2)
+		playSnd("charger_death")
 	}
 }
 
@@ -1484,6 +1543,7 @@ function getSpawn(){
 	}
 }
 
+let scoreMult = 1
 let currentScore = 0
 let highScore = localStorage.getItem("score") || 0
 
@@ -1502,7 +1562,7 @@ let enemyTable = [
 	{class: BigSlime, weight: 0},
 ]
 
-const speedupDelay = 30
+let speedupDelay = 30
 let timeUntilSpeedup = speedupDelay
 
 const increaseDelay = 110
@@ -1599,6 +1659,8 @@ setInterval(() => {
 
 
 function restart(){
+	scoreMult = 1 
+	speedupDelay = 30
 	currentScore = 0
 	priceMult = 1
 	
@@ -1640,7 +1702,14 @@ setInterval(() => {
 setInterval(() => {
 	if (plr.health <= 0 || plr.inputs.pause){return}
 
-	currentScore++
+	//entities.push(new Totem(getSpawn()))
+
+}, 10000);
+
+setInterval(() => {
+	if (plr.health <= 0 || plr.inputs.pause){return}
+
+	currentScore += scoreMult
 
 }, 1000);
 
@@ -1735,7 +1804,8 @@ function gameLoop(elapsed) {
 
 	const now = performance.now();
 	const timeSinceLastTick = now - lastTickTime;
-	const tickDelta = Math.min(timeSinceLastTick / tickTime, 1);
+	let tickDelta = Math.min(timeSinceLastTick / tickTime, 1);
+	if (plr.inputs.pause){tickDelta = 1}
 
 	camera.framePos = vec.lerp(camera._pos, camera.pos, tickDelta)
 	if (camera.screenshake > 0) {
