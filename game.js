@@ -55,6 +55,23 @@ const imgSources = [
 	},
 
 	{
+		name: "frostspirit_head",
+		src: "./sprites/enemies/frostspirit/frostspirit_head.png",
+	},
+	{
+		name: "frostspirit_top",
+		src: "./sprites/enemies/frostspirit/frostspirit_top.png",
+	},
+	{
+		name: "frostspirit_bottom",
+		src: "./sprites/enemies/frostspirit/frostspirit_bottom.png",
+	},
+	{
+		name: "frostspirit_projectile",
+		src: "./sprites/enemies/frostspirit/frostspirit_projectile.png",
+	},
+
+	{
 		name: "skeleton_idle1",
 		src: "./sprites/enemies/skeleton/skeleton_idle1.png",
 	},
@@ -222,6 +239,7 @@ let sounds = {
 	slime_death: new Audio('./audio/enemy/slime_death.mp3'),
 	skeleton_death: new Audio('./audio/enemy/skeleton_death.mp3'),
 	charger_death: new Audio('./audio/enemy/charger_death.mp3'),
+	frostspirit_death: new Audio('./audio/enemy/frostspirit_death.mp3'),
 }
 for (let i in sounds){
 	const snd = sounds[i]
@@ -432,6 +450,7 @@ let camera = {
 	screenshake: 0,
 }
 let entities = []
+let toDelete = []
 let particles = []
 
 function debugText(pos, text){
@@ -460,10 +479,10 @@ function renderSprite(sprite, pos, rot, size, flip, bright, flipY){
 }
 
 function killEntity(entity){
+	if (entity.dead) {return}
 	if (entity.death){entity.death()}
-
-	let index = entities.indexOf(entity)
-	entities.splice(index, 1);
+	entity.dead = true
+	toDelete.push(entity)
 }
 
 function damageEntity(entity, damage){
@@ -1021,6 +1040,39 @@ class LivingEntity extends BaseEntity {
 	}
 }
 
+class FrostSpike extends BaseEntity {
+	constructor(pos, rot, damage, vel, velDamp, size) {
+		super(pos, rot, damage, vel, velDamp, size);
+
+		this.hitDamage = damage || 15
+
+		this.sprite = sprites.frostspirit_projectile
+		this.ignoreCollisions = true
+		this.lifetime = 10
+	}
+	onHit(entity) {
+		if (entity == plr){
+			attackEntity(entity, this.hitDamage, vec.new(0, 0), 0)
+		}
+	}
+	explode(){
+		emitParticles(SmokeParticle, this.pos, this.size/2, 5, null)
+		for (let j in this.overlapping) {
+			let entity = this.overlapping[j]
+			this.onHit(entity)
+		}
+	}
+	tick(t) {
+		this.lifetime = this.lifetime - 1
+		if (this.lifetime <= 0){this.explode(); killEntity(this); return}
+	}
+	render(dt, elapsed, tickDelta, t) {
+		let framePos = vec.add(vec.lerp(this._pos, this.pos, tickDelta), camera.framePos)
+
+		renderSprite(this.sprite, framePos, this.rot, this.size, false)
+	}
+}
+
 class Projectile extends BaseEntity {
 	constructor(pos, rot, damage, vel, velDamp, size) {
 		super(pos, rot, damage, vel, velDamp, size);
@@ -1050,6 +1102,7 @@ class Projectile extends BaseEntity {
 		
 		for (let j in this.overlapping) {
 			let entity = this.overlapping[j]
+			if (entity.dead){continue}
 			const didHit = this.onHit(entity)
 			if (didHit){return}
 		}
@@ -1403,6 +1456,7 @@ class BigSlime extends Slime {
 		this.spriteCharge = sprites.bigslime_charge
 
 		this.spriteShadow = sprites.shadow_big
+		this.knockbackMultiplier = 0.8
 	}
 	death() {
 		emitParticles(SlimeParticle, this.pos, this.size/2)
@@ -1411,6 +1465,72 @@ class BigSlime extends Slime {
 		}
 		spawnCoins(this.pos, 3)
 		playSnd("slime_death")
+	}
+}
+
+class FrostSpirit extends EnemyBase {
+	constructor(pos, rot, vel, velDamp) {
+		super(pos, rot, vel, velDamp, 128); // call the parent constructor
+		this.maxHealth = 250
+		this.health = this.maxHealth
+		this.damage = 50
+
+		this.sprite = sprites.frostspirit_head
+		this.spriteTop = sprites.frostspirit_top
+		this.spriteBottom = sprites.frostspirit_bottom
+		this.spriteShadow = sprites.shadow_big
+		this.knockbackMultiplier = 0.5
+
+		this.attackCooldown = 40
+	}
+	death() {
+		emitParticles(TotemParticle, this.pos, this.size/2)
+		spawnCoins(this.pos, 8)
+		playSnd("frostspirit_death")
+	}
+	tick(t) {
+		this._tick(t)
+		
+		this.rot = deg.getDegreePointing(this.midPos, plr.midPos)
+		this.targetNormal = deg.getNormalVec(this.rot)
+
+		
+		const plrDist = vec.magnitudeSquared(vec.sub(plr.pos, this.pos))
+		if (plrDist > 250){
+			this.vel = vec.add(this.vel, vec.mulNum(this.targetNormal, 2))
+		}else{
+			if (this.attackCooldown > 0){this.attackCooldown = this.attackCooldown - 1}
+			if (this.attackCooldown <= 0){
+				this.attackCooldown = 30
+				for (let i = 1; i < 10; i++){
+					let proj = new FrostSpike(vec.add(
+						vec.add(this.pos, vec.mulNum(this.targetNormal, i*64)), 
+						vec.divNum(vec.new(this.size, this.size), 4)), 0)
+					proj.lifetime = i*2
+					entities.push(proj)
+				}
+				//this.vel = vec.add(this.vel, vec.mulNum(this.targetNormal, -20))
+				emitParticles(SmokeParticle, this.pos, this.size/2, 3, this.targetNormal)
+			}
+		}
+	}
+	render(dt, elapsed, tickDelta, t) {
+		let framePos = vec.add(vec.lerp(this._pos, this.pos, tickDelta), camera.framePos)
+
+		renderSprite(this.spriteTop, vec.add(framePos, vec.new(
+			Math.cos(elapsed/160)*2, 
+			Math.sin(elapsed/160)*4
+		)), 0, this.size, 0, (this.impactTicks > 0))
+
+		renderSprite(this.spriteBottom, vec.add(framePos, vec.new(
+			Math.sin(elapsed/160)*2, 
+			Math.cos(elapsed/160)*4
+		)), 0, this.size, 0, (this.impactTicks > 0))
+
+		renderSprite(this.sprite, vec.add(framePos, vec.new(
+			Math.cos(elapsed/200)*3, 
+			Math.sin(elapsed/200)*3
+		)), 0, this.size, 0, (this.impactTicks > 0))
 	}
 }
 
@@ -1560,6 +1680,7 @@ let enemyTable = [
 	{class: Skeleton, weight: 0},
 	{class: Charger, weight: 0},
 	{class: BigSlime, weight: 0},
+	{class: FrostSpirit, weight: 0},
 ]
 
 let speedupDelay = 30
@@ -1571,7 +1692,7 @@ let timeUntilIncrease = increaseDelay
 let difficulty = 0
 let difficultyTable = [
 	{
-		weights: {0: 100, 1: 0, 2: 0, 3: 0}, waveAmount: 3,
+		weights: {0: 100, 1: 0, 2: 0, 3: 0, 4: 0}, waveAmount: 3,
 	},
 	{
 		weights: {0: 50, 1: 20}, waveAmount: 3,
@@ -1583,13 +1704,13 @@ let difficultyTable = [
 		weights: {}, waveAmount: 5,
 	},
 	{
-		weights: {0: 20, 1: 20, 2: 30}, waveAmount: 4,
+		weights: {0: 20, 1: 20, 2: 30, 3: 5}, waveAmount: 4,
 	},
 	{
-		weights: {0: 5, 1: 20, 2: 60}, waveAmount: 5,
+		weights: {0: 5, 1: 20, 2: 60, 3: 10}, waveAmount: 5,
 	},
 	{
-		weights: {0: 0, 1: 20, 2: 60, 3: 5}, waveAmount: 7,
+		weights: {0: 0, 1: 20, 2: 60, 3: 5, 4: 10}, waveAmount: 7,
 	},
 ]
 
@@ -1870,7 +1991,7 @@ function tick(t) {
 
 		
 	//}
-
+	
 	entities.forEach(function(entity){
 		entity.overlapping = []
 		for (let j in entities) {
@@ -1898,6 +2019,13 @@ function tick(t) {
 		entity.midPos = vec.add(entity.pos, vec.divNum(vec.new(entity.size, entity.size), 2))
 		entity.tick(t)
 	})
+
+	for (let i in toDelete) {
+		let entity = toDelete[i]
+		let index = entities.indexOf(entity)
+		entities.splice(index, 1);
+	}
+	toDelete = []
 
 	for (let i in particles) {
 		let particle = particles[i]
