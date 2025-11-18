@@ -70,6 +70,10 @@ const imgSources = [
 		name: "frostspirit_projectile",
 		src: "./sprites/enemies/frostspirit/frostspirit_projectile.png",
 	},
+	{
+		name: "frostspirit_particle",
+		src: "./sprites/enemies/frostspirit/frostspirit_particle.png",
+	},
 
 	{
 		name: "skeleton_idle1",
@@ -618,6 +622,12 @@ class SmokeParticle extends BaseParticle {
 		this.sprite = (getRandomInt(1, 2) == 1 && sprites.smoke_particle1) || sprites.smoke_particle2
 	}
 }
+class FrostspiritParticle extends BaseParticle {
+	constructor(pos, vel, velDamp, grav, lifetime, normal) {
+		super(pos, vel, velDamp, grav, lifetime, normal);
+		this.sprite = sprites.frostspirit_particle
+	}
+}
 
 class BaseWeapon {
 	constructor() {
@@ -1056,7 +1066,7 @@ class FrostSpike extends BaseEntity {
 		}
 	}
 	explode(){
-		emitParticles(SmokeParticle, this.pos, this.size/2, 5, null)
+		emitParticles(FrostspiritParticle, this.pos, this.size/2, 5, null)
 		for (let j in this.overlapping) {
 			let entity = this.overlapping[j]
 			this.onHit(entity)
